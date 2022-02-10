@@ -43,8 +43,9 @@ class WordleGame:
         self.vocab = vocab
         self.target_word = target_word
         self.target_index = self.vocab.word2index[target_word]
-        # 6 stages, 5 letters, 26 letters + null, B/Y/G
-        self.game_state = torch.zeros(6,5,27,3, device=device)
+        # 6 stages, 5 letters, 26 letters + null, Not guessed/B/Y/G
+        self.game_state = torch.zeros(6,5,27,4, device=device)
+        self.game_state[:,:,:,3] = 1
         self.turn = 0
         self.won = 0
 
@@ -64,13 +65,14 @@ class WordleGame:
         target_l_idxes = [l_to_n(l) for l in target_ls]
         target_counts = Counter(target_l_idxes)
 
-        guess_feedback = torch.zeros(5, 27, 3)
+        guess_feedback = torch.zeros(5, 27, 4)
 
         # first check correct letter correct place
         for i,(g,t) in enumerate(zip(guess_l_idxes, target_l_idxes)):
             # if correct letter correct place
             if g == t:
-                guess_feedback[i][g][2] = 1
+                guess_feedback[i][g][0] = 1
+                guess_feedback[i][g][3] = 0
                 if target_counts[g] == 1:
                     del target_counts[g]
                 else:
@@ -78,9 +80,9 @@ class WordleGame:
 
         # check correct letter incorrect place
         for i,(g,t) in enumerate(zip(guess_l_idxes, target_l_idxes)):
-            if g in target_counts.keys() and guess_feedback[i][g][2] != 1:
+            if g in target_counts.keys() and guess_feedback[i][g][0] != 1:
                 guess_feedback[i][g][1] = 1
-
+                guess_feedback[i][g][3] = 0
                 if target_counts[g] == 1:
                     del target_counts[g]
                 else:
@@ -88,8 +90,9 @@ class WordleGame:
 
         # incorrect letter
         for i,(g,t) in enumerate(zip(guess_l_idxes, target_l_idxes)):
-            if guess_feedback[i][g][2] != 1 and guess_feedback[i][g][1] != 1:
-                guess_feedback[i][g][0] = 1
+            if guess_feedback[i][g][0] != 1 and guess_feedback[i][g][1] != 1:
+                guess_feedback[i][g][2] = 1
+                guess_feedback[i][g][3] = 0
             
         self.game_state[self.turn] = guess_feedback
         self.turn += 1
@@ -98,14 +101,14 @@ class WordleGame:
 
     def print_game_state(self):
         string = ''
-        feedback_dict = {2: 'G', 1: 'Y', 0: 'B'}
+        feedback_dict = {0: 'G', 1: 'Y', 2: 'B', 3: 'U'}
         for guess in self.game_state:
             l_str = ''
             f_str = ''
             for letter in guess:
-                l_idx = int(torch.argmax(letter)) // 3
+                l_idx = int(torch.argmax(letter)) // 4
                 l = n_to_l(l_idx)
-                f_idx = int(torch.argmax(letter) - l_idx * 3)
+                f_idx = int(torch.argmax(letter) - l_idx * 4)
                 feedback = feedback_dict[f_idx]
                 l_str += l
                 f_str += feedback
